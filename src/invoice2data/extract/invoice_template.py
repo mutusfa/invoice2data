@@ -201,7 +201,7 @@ class InvoiceTemplate(OrderedDict):
                     else:
                         logger.warning("Field %s has unknown parser %s set", k, v["parser"])
                 else:
-                    output[k] = self.__inner_extract(optimized_str)
+                    output[k] = self.__inner_extract(optimized_str, fields=v)
             elif k.startswith("static_"):
                 logger.debug("field=%s | static value=%s", k, v)
                 output[k.replace("static_", "")] = v
