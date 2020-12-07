@@ -155,46 +155,7 @@ class InvoiceTemplate(OrderedDict):
         # Try to find data for each field.
         output = {}
         output["issuer"] = self["issuer"]
-
-        for k, v in self["fields"].items():
-            if isinstance(v, dict):
-                if "parser" in v:
-                    if v["parser"] in PARSERS_MAPPING:
-                        parser = PARSERS_MAPPING[v["parser"]]
-                        value = parser.parse(self, v, optimized_str)
-                        if value is not None:
-                            output[k] = value
-                        else:
-                            logger.error("Failed to parse field %s with parser %s", k, v["parser"])
-                    else:
-                        logger.warning("Field %s has unknown parser %s set", k, v["parser"])
-                else:
-                    logger.warning("Field %s doesn't have parser specified", k)
-            elif k.startswith("static_"):
-                logger.debug("field=%s | static value=%s", k, v)
-                output[k.replace("static_", "")] = v
-            else:
-                # Legacy syntax support (backward compatibility)
-                logger.debug("field=%s | regexp=%s", k, v)
-
-                result = None
-                if k.startswith("sum_amount") and type(v) is list:
-                    k = k[4:]
-                    result = parsers.regex.parse(self, {"regex": v, "type": "float", "group": "sum"}, optimized_str,
-                                                 True)
-                elif k.startswith("date") or k.endswith("date"):
-                    result = parsers.regex.parse(self, {"regex": v, "type": "date"}, optimized_str, True)
-                elif k.startswith("amount"):
-                    result = parsers.regex.parse(self, {"regex": v, "type": "float"}, optimized_str, True)
-                else:
-                    result = parsers.regex.parse(self, {"regex": v}, optimized_str, True)
-
-                if result is None:
-                    logger.warning("regexp for field %s didn't match", k)
-                else:
-                    output[k] = result
-
-        output["currency"] = self.options["currency"]
+        output.update(self.__inner_extract(optimized_str, fields=self["fields"]))
 
         # Run plugins:
         for plugin_keyword, plugin_func in PLUGIN_MAPPING.items():
@@ -223,3 +184,47 @@ class InvoiceTemplate(OrderedDict):
                 )
             )
             return None
+
+
+    def __inner_extract(self, optimized_str, fields):
+        output = {}
+        for k, v in fields.items():
+            if isinstance(v, dict):
+                if "parser" in v:
+                    if v["parser"] in PARSERS_MAPPING:
+                        parser = PARSERS_MAPPING[v["parser"]]
+                        value = parser.parse(self, v, optimized_str)
+                        if value is not None:
+                            output[k] = value
+                        else:
+                            logger.error("Failed to parse field %s with parser %s", k, v["parser"])
+                    else:
+                        logger.warning("Field %s has unknown parser %s set", k, v["parser"])
+                else:
+                    output[k] = self.__inner_extract(optimized_str)
+            elif k.startswith("static_"):
+                logger.debug("field=%s | static value=%s", k, v)
+                output[k.replace("static_", "")] = v
+            else:
+                # Legacy syntax support (backward compatibility)
+                logger.debug("field=%s | regexp=%s", k, v)
+
+                result = None
+                if k.startswith("sum_amount") and type(v) is list:
+                    k = k[4:]
+                    result = parsers.regex.parse(self, {"regex": v, "type": "float", "group": "sum"}, optimized_str,
+                                                 True)
+                elif k.startswith("date") or k.endswith("date"):
+                    result = parsers.regex.parse(self, {"regex": v, "type": "date"}, optimized_str, True)
+                elif k.startswith("amount"):
+                    result = parsers.regex.parse(self, {"regex": v, "type": "float"}, optimized_str, True)
+                else:
+                    result = parsers.regex.parse(self, {"regex": v}, optimized_str, True)
+
+                if result is None:
+                    logger.warning("regexp for field %s didn't match", k)
+                else:
+                    output[k] = result
+
+        output["currency"] = self.options["currency"]
+        return output
